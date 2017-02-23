@@ -12,15 +12,18 @@ module Lib (
     turnDirection,
     turnDirections,
     grahamScanStartingPoint,
+    sortByAngleTo,
+    angleBetween,
     grahamScan
 ) where
 
 import Data.List
 import Data.Function
+--import Debug.Trace
 
 listLength :: [a] -> Integer
 listLength [] = 0
-listLength (x:xs) = 1 + listLength xs
+listLength (_:xs) = 1 + listLength xs
 
 meanList :: [Integer] -> Double
 meanList [] = error "No items"
@@ -59,21 +62,27 @@ data Tree a = Node a (Tree a) (Tree a)
 
 treeHeight :: Tree a -> Integer
 treeHeight Empty = 0
-treeHeight (Node a l r) = maximum [(1 + treeHeight l), (1 + treeHeight r)]
+treeHeight (Node _ l r) = maximum [(1 + treeHeight l), (1 + treeHeight r)]
 
 data Direction = LeftTurn | RightTurn | Straight deriving (Show, Eq)
 data Point2 = Point2 { pointX :: Integer, pointY :: Integer } deriving (Show, Eq)
 
+lineAngle :: Point2 -> Point2 -> Double
+lineAngle (Point2 ax ay) (Point2 bx by) = atan2 (fromIntegral (by - ay)) (fromIntegral (bx - ax))
+
 angleBetween :: Point2 -> Point2 -> Point2 -> Double
-angleBetween (Point2 ax ay) (Point2 bx by) (Point2 cx cy) = angle1 - angle2
+angleBetween a b c
+    | angleDiff > pi = angleDiff - (2 * pi)
+    | otherwise = angleDiff
     where
-        angle1 = atan2 (fromIntegral (bx - ax)) (fromIntegral (by - ay))
-        angle2 = atan2 (fromIntegral (cx - bx)) (fromIntegral (cy - by))
+        angle1 = lineAngle a b
+        angle2 = lineAngle b c
+        angleDiff = angle1 - angle2
 
 turnDirection :: Point2 -> Point2 -> Point2 -> Direction
 turnDirection a b c
-    | angleDiff < 0 = RightTurn
-    | angleDiff > 0 = LeftTurn
+    | angleDiff > 0 = RightTurn
+    | angleDiff < 0 = LeftTurn
     | otherwise = Straight
     where angleDiff = angleBetween a b c
 
@@ -84,53 +93,30 @@ turnDirections [_,_] = []
 turnDirections (a:ps@(b:c:_)) = turnDirection a b c : turnDirections ps
 
 -- note: see wikipedia article on graham scan - more efficient method than getting angle
-sortByAngleWithPointAndXAxis :: Point2 -> [Point2] -> [Point2]
-sortByAngleWithPointAndXAxis p ps = sortBy (compare `on` (\x -> angleBetween x p (movePoint x 1 0))) ps
+sortByAngleTo :: Point2 -> [Point2] -> [Point2]
+sortByAngleTo p ps = sortBy (compare `on` (\x -> if p == x then -9999999 else (angleBetween xAxis p x))) ps
+    where xAxis = movePoint p 1 0
 
 grahamScanStartingPoint :: [Point2] -> Point2
 grahamScanStartingPoint [] = error "No items"
-grahamScanStartingPoint ps = minimumBy (compare `on` (\p -> ((pointY p),(pointX p)))) ps
+grahamScanStartingPoint ps = minimumBy (compare `on` (\p -> ((-(pointY p)),(-(pointX p))))) ps
 
 grahamScan :: [Point2] -> [Point2]
-grahamScan [] = []
-grahamScan [a] = [a]
-grahamScan [a,b] = [a,b]
-grahamScan [a,b,c] = [a,b,c]
-grahamScan ps = grahamScanStep sorted ++ (take 2 sorted)
+grahamScan ps
+    | (length ps) < 3 = error "Need at least 3"
+    | otherwise = grahamScanStep (reverse (take 3 sorted)) (drop 3 sorted)
     where
         p = grahamScanStartingPoint ps
-        sorted = sortByAngleWithPointAndXAxis p ps
+        sorted = sortByAngleTo p ps
 
-grahamScanStep :: [Point2] -> [Point2]
-grahamScanStep [] = []
-grahamScanStep [_] = []
-grahamScanStep [_,_] = []
-grahamScanStep (a:ps@(b:c:_)) =
-    case (turnDirection a b c) of RightTurn -> grahamScanStep ps
-                                  _ -> a : grahamScanStep ps
-
-{-
-
-a b c (d:ds)
-t = turnDirection a b c
-if t == LEFT || STRAIGHT
-    a : step b c d ds
-else (RIGHT - a is inside)
-    step b c d ds
-
-
--}
-{-
- 1. considering each of the points in the sorted array in sequence
-   a. It is first determined whether traveling from the two points immediately preceding this point constitutes making a left turn or a right turn
-     i.  If a right turn, the second-to-last point is not part of the convex hull, and lies 'inside' it.
-     ii. The same determination is then made for the set of the latest point and the two points that immediately precede
-         the point found to have been inside the hull, and is repeated until a "left turn" set is encountered, at which
-         point the algorithm moves on to the next point in the set of points in the sorted array minus any points that
-         were found to be inside the hull; there is no need to consider these points again. (If at any stage the three
-         points are collinear, one may opt either to discard or to report it, since in some applications it is required
-         to find all points on the boundary of the convex hull.)
--}
+grahamScanStep :: [Point2] -> [Point2] -> [Point2]
+grahamScanStep x [] = x
+grahamScanStep [] _ = error "Should always be atleast 3 inside (0)"
+grahamScanStep [_] _ = error "Should always be atleast 3 inside (1)"
+grahamScanStep [_,_] _ = error "Should always be atleast 3 inside (2)"
+grahamScanStep inside@(x:xs@(y:_)) (p:ps) =
+    case (turnDirection y x p) of LeftTurn -> grahamScanStep (p:xs) ps
+                                  _ -> grahamScanStep (p : inside) ps
 
 movePoint :: Point2 -> Integer -> Integer -> Point2
 movePoint p 0 0 = p

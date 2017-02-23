@@ -1,6 +1,10 @@
 import Test.Hspec
 import Control.Exception (evaluate)
 import Lib
+import Linear.Epsilon
+
+closeTo :: Double -> Double -> Bool
+closeTo limit x = nearZero (x - limit)
 
 main :: IO ()
 main = hspec $ do
@@ -81,8 +85,11 @@ main = hspec $ do
       treeHeight (Node 'a' (Node 'b' (Node 'c' Empty Empty) (Node 'd' Empty Empty)) (Node 'e' Empty Empty)) `shouldBe` 3
 
   describe "turnDirection" $ do
-    it "should return straight for inline" $
+    it "should return straight for inline up" $
       turnDirection (Point2 1 1) (Point2 1 3) (Point2 1 4) `shouldBe` Straight
+
+    it "should return straight for inline down" $
+      turnDirection (Point2 1 4) (Point2 1 3) (Point2 1 1) `shouldBe` Straight
 
     it "should return right for right turn" $
       turnDirection (Point2 1 1) (Point2 1 3) (Point2 3 3) `shouldBe` RightTurn
@@ -102,23 +109,61 @@ main = hspec $ do
       grahamScanStartingPoint [(Point2 1 1)] `shouldBe` (Point2 1 1)
 
     it "should return result for multiple" $
-      grahamScanStartingPoint [(Point2 1 1), (Point2 10 0), (Point2 5 5)] `shouldBe` (Point2 10 0)
+      grahamScanStartingPoint [(Point2 1 1), (Point2 10 0), (Point2 5 5)] `shouldBe` (Point2 5 5)
 
-    it "should return lowest x for tie breaking" $
-      grahamScanStartingPoint [(Point2 10 0), (Point2 1 0), (Point2 5 0)] `shouldBe` (Point2 1 0)
+    it "should return largest x for tie breaking" $
+      grahamScanStartingPoint [(Point2 10 0), (Point2 1 0), (Point2 5 0)] `shouldBe` (Point2 10 0)
+
+  describe "angleBetween" $ do
+    it "should return correct for Q2" $
+      angleBetween (Point2 2 0) (Point2 0 0) (Point2 (-2) (-2)) `shouldSatisfy` (closeTo ((-pi) / 4))
+
+    it "should return correct for Q3" $
+      angleBetween (Point2 2 0) (Point2 0 0) (Point2 2 (-2)) `shouldSatisfy` (closeTo ((-3) * pi / 4))
+
+    it "should return correct for Q1" $
+      angleBetween (Point2 2 0) (Point2 0 0) (Point2 (-2) 2) `shouldSatisfy` (closeTo (pi / 4))
+
+    it "should return correct for Q4" $
+      angleBetween (Point2 2 0) (Point2 0 0) (Point2 2 2) `shouldSatisfy` (closeTo (3 * pi / 4))
+
+    it "should return correct for right angle turn" $
+      angleBetween (Point2 1 1) (Point2 1 3) (Point2 3 3) `shouldSatisfy` (closeTo (pi / 2))
+
+    it "should return correct for same dir" $
+      angleBetween (Point2 1 1) (Point2 1 2) (Point2 1 3) `shouldSatisfy` (closeTo 0)
+
+    it "should return correct for 180" $
+      angleBetween (Point2 1 1) (Point2 1 2) (Point2 1 0) `shouldSatisfy` (closeTo pi)
+
+    it "should return correct for a horizontal angle" $
+      angleBetween (Point2 0 0) (Point2 1 0) (Point2 0 0) `shouldSatisfy` (closeTo (-pi))
+
+  describe "sortByAngleTo" $ do
+    it "should sort correct for small set" $
+      sortByAngleTo (Point2 0 2) [(Point2 0 2), (Point2 2 1), (Point2 2 0)] `shouldBe` [(Point2 0 2), (Point2 2 1), (Point2 2 0)]
+
+    it "should sort correct for small set 2" $
+      sortByAngleTo (Point2 0 2) [(Point2 2 0), (Point2 (-1) 1), (Point2 2 1)] `shouldBe` [(Point2 2 1), (Point2 2 0), (Point2 (-1) 1)]
 
   describe "grahamScan" $ do
-    it "should return empty for empty" $
-      grahamScan [] `shouldBe` []
+    it "should error for empty" $
+      evaluate (grahamScan []) `shouldThrow` errorCall "Need at least 3"
 
     it "should return single for single" $
-      grahamScan [(Point2 1 1)] `shouldBe` [(Point2 1 1)]
+      evaluate (grahamScan [(Point2 1 1)]) `shouldThrow` errorCall "Need at least 3"
 
     it "should return double for double" $
-      grahamScan [(Point2 1 1), (Point2 2 2)] `shouldBe` [(Point2 1 1), (Point2 2 2)]
+      evaluate (grahamScan [(Point2 1 1), (Point2 0 0)]) `shouldThrow` errorCall "Need at least 3"
 
     it "should return input for triangle" $
       grahamScan [(Point2 0 0), (Point2 1 1), (Point2 2 0)] `shouldMatchList` [(Point2 0 0), (Point2 1 1), (Point2 2 0)]
 
-    it "should return correct for larger for triangle" $
-      grahamScan [(Point2 0 0), (Point2 2 2), (Point2 4 0), (Point2 1 1)] `shouldMatchList` [(Point2 0 0), (Point2 2 2), (Point2 4 0)]
+    it "should return correct for larger for triangle with inside" $
+      grahamScan [(Point2 0 0), (Point2 2 2), (Point2 4 0), (Point2 2 1)] `shouldMatchList` [(Point2 0 0), (Point2 2 2), (Point2 4 0)]
+
+    it "should return correct for square" $
+      grahamScan [(Point2 0 0), (Point2 0 1), (Point2 1 1), (Point2 1 0)] `shouldMatchList` [(Point2 0 0), (Point2 0 1), (Point2 1 1), (Point2 1 0)]
+
+    it "should return correct for square with insides" $
+      grahamScan [(Point2 0 0), (Point2 0 3), (Point2 3 3), (Point2 3 0), (Point2 1 1), (Point2 1 2)] `shouldMatchList` [(Point2 0 0), (Point2 0 3), (Point2 3 3), (Point2 3 0)]
